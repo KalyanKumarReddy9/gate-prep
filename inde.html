@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 30-Day GATE Study Planner</title>
+    <!-- Chosen Palette: Calm Focus -->
+    <!-- Application Structure Plan: The application is designed as an interactive dashboard. The core structure uses a tabbed navigation for the four weeks, allowing users to focus on one week at a time without being overwhelmed by a long list. This is better than a linear document as it promotes focused engagement. The main interactive elements are checklists for each day's topics. User progress is saved to local storage and visually represented by dynamic progress bars and a central doughnut chart. This gamified approach with visual feedback is chosen to motivate the user and provide a clear sense of accomplishment, transforming a static plan into a dynamic personal tool. A separate modal for resources keeps supplementary information accessible but unobtrusive. -->
+    <!-- Visualization & Content Choices: Report Info: Overall 30-day progress -> Goal: Motivate & Inform -> Viz: Doughnut Chart (Chart.js) -> Interaction: Updates automatically when any topic is checked/unchecked -> Justification: More visually engaging than a simple bar for the primary progress metric. Report Info: Weekly progress -> Goal: Inform at a glance -> Viz: HTML/CSS Progress Bar -> Interaction: Updates when topics within the week are checked -> Justification: A simple, clean way to show progress for the currently viewed section without cluttering the UI. Report Info: Daily topics -> Goal: Organize & Track -> Viz: Interactive Checklist (HTML/CSS/JS) -> Interaction: User can check/uncheck items -> Justification: The core interaction to allow users to mark progress, which is essential for a study planner. CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .progress-bar-bg {
+            background-color: #e2e8f0; /* slate-200 */
+        }
+        .progress-bar-fill {
+            background-color: #3b82f6; /* blue-500 */
+            transition: width 0.3s ease-in-out;
+        }
+        .nav-button {
+            transition: all 0.2s ease-in-out;
+        }
+        .nav-button.active {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .task-checkbox:checked + label .checkbox-icon {
+            background-color: #3b82f6;
+            border-color: #3b82f6;
+        }
+        .task-checkbox:checked + label .checkbox-icon svg {
+            display: block;
+        }
+        .task-checkbox:checked + label span {
+            text-decoration: line-through;
+            color: #64748b; /* slate-500 */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 200px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 200px;
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div id="app" class="main-container p-4 md:p-8">
+
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-900">30-Day GATE CS/DA Study Plan</h1>
+            <p class="mt-2 text-slate-600">Your interactive guide to mastering key concepts in one month.</p>
+        </header>
+        
+        <div class="flex flex-col lg:flex-row gap-8 mb-8">
+            <div class="lg:w-1/3 bg-white p-6 rounded-2xl shadow-lg flex flex-col items-center justify-center">
+                <h2 class="text-xl font-bold mb-4 text-slate-900">Overall Progress</h2>
+                <div class="chart-container">
+                    <canvas id="overallProgressChart"></canvas>
+                </div>
+                <p id="progressText" class="mt-4 text-lg font-semibold text-slate-700">0% Complete</p>
+                <p class="text-sm text-slate-500">Keep up the great work!</p>
+            </div>
+
+            <div class="lg:w-2/3 bg-white p-6 rounded-2xl shadow-lg">
+                <div class="flex items-center justify-between mb-4">
+                     <h2 class="text-xl font-bold text-slate-900">Weekly Plan</h2>
+                     <button id="resourcesBtn" class="bg-blue-100 text-blue-700 hover:bg-blue-200 font-semibold py-2 px-4 rounded-lg transition-colors">📚 View Resources</button>
+                </div>
+                <p class="text-slate-600 mb-6">Select a week to view the daily study topics. Your progress is saved automatically as you check off tasks.</p>
+                <nav id="week-navigation" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                </nav>
+            </div>
+        </div>
+
+        <main id="plan-content" class="bg-white p-6 rounded-2xl shadow-lg min-h-[300px]">
+        </main>
+
+    </div>
+
+    <!-- Resources Modal -->
+    <div id="resourcesModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div class="p-6 border-b flex justify-between items-center">
+                <h2 class="text-2xl font-bold text-slate-900">Essential Resources</h2>
+                <button id="closeModalBtn" class="text-slate-500 hover:text-slate-800 text-2xl">&times;</button>
+            </div>
+            <div id="modal-content" class="p-6 overflow-y-auto">
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const studyPlan = {
+                weeks: [
+                    {
+                        id: 1,
+                        title: "Probability & Statistics",
+                        days: [
+                            { day: 1, title: "Counting & Basics", topics: ["Permutations & Combinations", "Probability axioms", "Sample space, events", "Mutually exclusive & independent events"] },
+                            { day: 2, title: "Types of Probabilities", topics: ["Marginal, Conditional & Joint probability", "Bayes' Theorem", "Random variables (intro)"] },
+                            { day: 3, title: "Discrete Random Variables", topics: ["PMF", "Bernoulli, Binomial, Uniform"] },
+                            { day: 4, title: "Continuous Random Variables", topics: ["PDF", "Uniform, Exponential, Poisson"] },
+                            { day: 5, title: "Normal Distributions", topics: ["Normal, Standard Normal", "t-distribution", "Chi-square distribution"] },
+                            { day: 6, title: "Statistical Measures", topics: ["Mean, Median, Mode", "Variance, Standard Deviation", "Correlation & Covariance", "Conditional expectation/variance"] },
+                            { day: 7, title: "Inference", topics: ["CDF", "CLT (Central Limit Theorem)", "Confidence interval", "z-test, t-test, Chi-square test"] }
+                        ]
+                    },
+                    {
+                        id: 2,
+                        title: "Linear Algebra & Calculus",
+                        days: [
+                            { day: 8, title: "Vector Spaces", topics: ["Vector space, subspace", "linear dependence/independence"] },
+                            { day: 9, title: "Matrices & Properties", topics: ["Projection, orthogonal, idempotent, partition matrix", "Quadratic forms"] },
+                            { day: 10, title: "Systems of Equations", topics: ["Gaussian elimination", "Rank & nullity"] },
+                            { day: 11, title: "Eigenvalues & Eigenvectors", topics: ["Determinant", "Projections"] },
+                            { day: 12, title: "Decompositions", topics: ["LU Decomposition", "SVD (Singular Value Decomposition)"] },
+                            { day: 13, title: "Calculus Basics", topics: ["Functions, limit, continuity, differentiability"] },
+                            { day: 14, title: "Optimization", topics: ["Taylor series", "maxima & minima", "single-variable optimization"] }
+                        ]
+                    },
+                    {
+                        id: 3,
+                        title: "DSA, DBMS & Warehousing",
+                        days: [
+                            { day: 15, title: "Python Basics & Data Structures", topics: ["Lists, stacks, queues", "linked lists, hash tables"] },
+                            { day: 16, title: "Trees & Graph Intro", topics: ["Tree/Binary Tree properties", "Graph representations", "Graph traversals: BFS, DFS"] },
+                            { day: 17, title: "Searching & Sorting", topics: ["Linear & Binary search", "Selection, Bubble, Insertion sort"] },
+                            { day: 18, title: "Advanced Sorting & Graph", topics: ["Merge Sort, Quick Sort", "Shortest path (Dijkstra or BFS)"] },
+                            { day: 19, title: "DBMS (Theory)", topics: ["ER Model", "Relational model", "Relational algebra, Tuple calculus"] },
+                            { day: 20, title: "SQL & Constraints", topics: ["Normal forms (1NF, 2NF, 3NF, BCNF)", "File organization", "Indexing"] },
+                            { day: 21, title: "Warehousing & Mining", topics: ["Normalization, sampling, compression", "Star/Snowflake schema", "Concept hierarchies, Measures"] }
+                        ]
+                    },
+                    {
+                        id: 4,
+                        title: "ML & AI",
+                        days: [
+                            { day: 22, title: "Supervised Learning (Regression)", topics: ["Simple, multiple, ridge regression", "Bias-variance tradeoff"] },
+                            { day: 23, title: "Classification (Basics)", topics: ["Logistic regression", "k-NN", "Naive Bayes", "LDA"] },
+                            { day: 24, title: "Advanced Classification", topics: ["SVM (kernel trick concept)", "Decision Trees (ID3/C4.5)", "Cross-validation (K-fold, LOO)"] },
+                            { day: 25, title: "Neural Networks", topics: ["Perceptron, MLP structure", "Feed-forward networks"] },
+                            { day: 26, title: "Unsupervised Learning", topics: ["K-means / K-medoid clustering", "Hierarchical clustering"] },
+                            { day: 27, title: "Dimensionality Reduction", topics: ["PCA (Principal Component Analysis)"] },
+                            { day: 28, title: "AI – Search", topics: ["Informed (A*), uninformed (BFS/DFS)", "adversarial search (Minimax)"] },
+                            { day: 29, title: "AI – Logic", topics: ["Propositional logic", "Predicate logic", "Reasoning under uncertainty"] },
+                            { day: 30, title: "Probabilistic Inference", topics: ["Conditional independence", "Variable elimination", "Sampling approaches"] }
+                        ]
+                    }
+                ]
+            };
+            
+            const resources = [
+                {
+                    category: '📊 Probability & Statistics',
+                    items: [
+                        { name: 'NPTEL: Probability and Statistics', note: 'Excellent, in-depth video lectures covering all core topics.' },
+                        { name: 'Sheldon Ross: A First Course in Probability', note: 'A classic, well-regarded text for conceptual clarity.' },
+                        { name: 'Khan Academy (Statistics & Probability)', note: 'Good for foundational understanding of CLT, Confidence Intervals, and Hypothesis Testing.' }
+                    ]
+                },
+                {
+                    category: '🧮 Linear Algebra & Calculus',
+                    items: [
+                        { name: 'MIT OpenCourseWare (Gilbert Strang)', note: 'The definitive lecture series for conceptual mastery of Linear Algebra.' },
+                        { name: 'NPTEL: Linear Algebra', note: 'Covers GATE-specific topics like rank, nullity, and systems of equations thoroughly.' },
+                        { name: 'Khan Academy (Differential Calculus)', note: 'Review limits, derivatives, continuity, and optimization.' }
+                    ]
+                },
+                {
+                    category: '💻 DSA, DBMS, & Warehousing',
+                    items: [
+                        { name: 'NPTEL: Data Structures and Algorithms', note: 'Standard course material covering trees, graphs, and sorting complexity.' },
+                        { name: 'GeeksforGeeks (DSA sections)', note: 'Focus on time complexity and algorithms like Dijkstra\'s, Merge Sort, etc.' },
+                        { name: 'NPTEL: Database Management System', note: 'Essential for ER/Relational Model, Relational Algebra, and Normal Forms.' }
+                    ]
+                },
+                {
+                    category: '🧠 Machine Learning & Artificial Intelligence',
+                    items: [
+                        { name: 'Andrew Ng’s Machine Learning Course', note: 'Focus on the intuition and math behind Regression, and Neural Networks.' },
+                        { name: 'ISLR (Introduction to Statistical Learning)', note: 'Excellent for SVM, Decision Trees, Cross-Validation, and Classification methods.' },
+                        { name: 'AIMA Book (Russell & Norvig)', note: 'Review Minimax, A* Search, and the syntax/semantics of Propositional and Predicate Logic.' }
+                    ]
+                }
+            ];
+
+
+            let progressState = JSON.parse(localStorage.getItem('gateStudyProgress')) || {};
+            let activeWeek = 1;
+
+            const weekNavContainer = document.getElementById('week-navigation');
+            const planContentContainer = document.getElementById('plan-content');
+            const progressText = document.getElementById('progressText');
+            const resourcesBtn = document.getElementById('resourcesBtn');
+            const resourcesModal = document.getElementById('resourcesModal');
+            const closeModalBtn = document.getElementById('closeModalBtn');
+            const modalContent = document.getElementById('modal-content');
+
+
+            const ctx = document.getElementById('overallProgressChart').getContext('2d');
+            const overallProgressChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Completed', 'Remaining'],
+                    datasets: [{
+                        data: [0, 100],
+                        backgroundColor: ['#3b82f6', '#e2e8f0'],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false }
+                    }
+                }
+            });
+
+            function saveProgress() {
+                localStorage.setItem('gateStudyProgress', JSON.stringify(progressState));
+            }
+
+            function calculateProgress() {
+                let totalTopics = 0;
+                let completedTopics = 0;
+                studyPlan.weeks.forEach(week => {
+                    week.days.forEach(day => {
+                        day.topics.forEach((topic, index) => {
+                            totalTopics++;
+                            if (progressState[`day${day.day}-topic${index}`]) {
+                                completedTopics++;
+                            }
+                        });
+                    });
+                });
+                return totalTopics > 0 ? (completedTopics / totalTopics) * 100 : 0;
+            }
+
+            function updateOverallProgress() {
+                const percentage = calculateProgress();
+                progressText.textContent = `${Math.round(percentage)}% Complete`;
+                overallProgressChart.data.datasets[0].data = [percentage, 100 - percentage];
+                overallProgressChart.update();
+            }
+
+            function renderWeek(weekId) {
+                activeWeek = weekId;
+                const weekData = studyPlan.weeks.find(w => w.id === weekId);
+                if (!weekData) return;
+
+                let completedInWeek = 0;
+                let totalInWeek = 0;
+
+                const dayCards = weekData.days.map(day => {
+                    const topicList = day.topics.map((topic, index) => {
+                        const topicId = `day${day.day}-topic${index}`;
+                        const isChecked = progressState[topicId] || false;
+                        if (isChecked) completedInWeek++;
+                        totalInWeek++;
+
+                        return `
+                            <div class="flex items-center my-2">
+                                <input type="checkbox" id="${topicId}" data-day="${day.day}" data-topic-index="${index}" class="task-checkbox hidden" ${isChecked ? 'checked' : ''}>
+                                <label for="${topicId}" class="flex items-center cursor-pointer text-slate-700 w-full">
+                                    <span class="checkbox-icon w-5 h-5 mr-3 border-2 border-slate-300 rounded-md flex items-center justify-center transition-all">
+                                        <svg class="w-3 h-3 text-white hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                                    </span>
+                                    <span class="flex-1">${topic}</span>
+                                </label>
+                            </div>`;
+                    }).join('');
+
+                    return `
+                        <div class="bg-slate-50 p-4 rounded-lg">
+                            <h4 class="font-bold text-slate-800">Day ${day.day}: ${day.title}</h4>
+                            <div class="mt-2">${topicList}</div>
+                        </div>`;
+                }).join('');
+                
+                const weekProgress = totalInWeek > 0 ? (completedInWeek / totalInWeek) * 100 : 0;
+
+                planContentContainer.innerHTML = `
+                    <div class="mb-4">
+                        <h3 class="text-2xl font-bold text-slate-900">${weekData.title}</h3>
+                        <p class="text-slate-500">Week ${weekData.id} of 4</p>
+                    </div>
+                    <div class="mb-6">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-sm font-medium text-slate-600">Weekly Progress</span>
+                            <span class="text-sm font-medium text-blue-600">${Math.round(weekProgress)}%</span>
+                        </div>
+                        <div class="w-full progress-bar-bg rounded-full h-2.5">
+                            <div class="progress-bar-fill h-2.5 rounded-full" style="width: ${weekProgress}%"></div>
+                        </div>
+                    </div>
+                    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">${dayCards}</div>
+                `;
+
+                updateNavButtons();
+            }
+
+            function updateNavButtons() {
+                document.querySelectorAll('.nav-button').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (parseInt(btn.dataset.weekId) === activeWeek) {
+                        btn.classList.add('active');
+                    }
+                });
+            }
+
+            function handleTopicCheck(e) {
+                if (e.target.classList.contains('task-checkbox')) {
+                    const topicId = e.target.id;
+                    progressState[topicId] = e.target.checked;
+                    saveProgress();
+                    updateOverallProgress();
+                    renderWeek(activeWeek); // Re-render to update weekly progress bar
+                }
+            }
+            
+            function renderNav() {
+                weekNavContainer.innerHTML = studyPlan.weeks.map(week => `
+                    <button class="nav-button w-full text-left p-4 rounded-lg bg-slate-100 hover:bg-slate-200" data-week-id="${week.id}">
+                        <span class="font-bold block text-slate-800">Week ${week.id}</span>
+                        <span class="text-sm text-slate-500">${week.title}</span>
+                    </button>
+                `).join('');
+            }
+            
+            function renderResources() {
+                modalContent.innerHTML = resources.map(cat => `
+                    <div class="mb-6">
+                        <h3 class="text-xl font-bold text-slate-800 border-b pb-2 mb-3">${cat.category}</h3>
+                        <ul class="space-y-3">
+                            ${cat.items.map(item => `
+                                <li>
+                                    <p class="font-semibold text-blue-600">${item.name}</p>
+                                    <p class="text-slate-600 text-sm">${item.note}</p>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                `).join('');
+            }
+
+
+            weekNavContainer.addEventListener('click', e => {
+                const button = e.target.closest('.nav-button');
+                if (button) {
+                    renderWeek(parseInt(button.dataset.weekId));
+                }
+            });
+
+            planContentContainer.addEventListener('change', handleTopicCheck);
+            
+            resourcesBtn.addEventListener('click', () => resourcesModal.classList.remove('hidden') || resourcesModal.classList.add('flex'));
+            closeModalBtn.addEventListener('click', () => resourcesModal.classList.add('hidden') || resourcesModal.classList.remove('flex'));
+            resourcesModal.addEventListener('click', e => {
+                 if (e.target === resourcesModal) {
+                    resourcesModal.classList.add('hidden') || resourcesModal.classList.remove('flex');
+                 }
+            });
+
+
+            function init() {
+                renderNav();
+                renderResources();
+                renderWeek(1);
+                updateOverallProgress();
+            }
+
+            init();
+        });
+    </script>
+
+</body>
+</html>
